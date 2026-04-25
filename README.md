@@ -2,6 +2,15 @@
 
 Zero-setup batch OCR for Hindi text in images. Single file, no dependencies, no sudo.
 
+## Quick Start (No Git)
+
+**Option 1 — One-liner (terminal):**
+```bash
+curl -O https://raw.githubusercontent.com/nd28/image-ocr/main/ocr.py && python3 ocr.py /path/to/photos
+```
+
+**Option 2 — Download ZIP:**
+Click **Code → Download ZIP** (green button above), extract, then:
 ```bash
 python3 ocr.py /path/to/photos
 ```
