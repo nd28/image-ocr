@@ -54,6 +54,10 @@ python3 ocr.py ~/photos -l mar      # Marathi
 python3 ocr.py ~/photos -l hin+eng  # Hindi + English
 ```
 
+## Platforms
+
+Linux (x64, ARM) · macOS (Intel, Apple Silicon) · **Windows (x64)**
+
 ## Requirements
 
 - Python 3.8+

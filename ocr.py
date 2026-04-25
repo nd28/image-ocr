@@ -8,11 +8,13 @@ Usage:
     python3 ocr.py /path/to/photos -l hin+eng
 
 Single file. No pip install. No sudo. Just Python 3.8+.
+Cross-platform: Linux, macOS (Intel + ARM), Windows.
 Auto-bootstraps Tesseract on first run (~50MB one-time download).
 """
 
 import argparse
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -20,13 +22,53 @@ import urllib.request
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
+# platform detection
+# ---------------------------------------------------------------------------
+
+_PLATFORM_MAP = {
+    ("Linux", "x86_64"):   "linux-64",
+    ("Linux", "amd64"):    "linux-64",
+    ("Linux", "aarch64"):  "linux-aarch64",
+    ("Linux", "arm64"):    "linux-aarch64",
+    ("Darwin", "x86_64"):  "osx-64",
+    ("Darwin", "amd64"):   "osx-64",
+    ("Darwin", "arm64"):   "osx-arm64",
+    ("Darwin", "aarch64"): "osx-arm64",
+    ("Windows", "amd64"):  "win-64",
+    ("Windows", "x86_64"): "win-64",
+}
+
+_IS_WINDOWS = platform.system() == "Windows"
+
+
+def _detect_platform() -> tuple[str, str]:
+    """Return (micromamba_asset_suffix, exe_extension)."""
+    system = platform.system()
+    machine = platform.machine().lower()
+    key = (system, machine)
+    asset = _PLATFORM_MAP.get(key)
+    if asset is None:
+        sys.exit(
+            f"Unsupported platform: {system} ({machine}). "
+            "Please install tesseract manually."
+        )
+    exe = ".exe" if system == "Windows" else ""
+    return asset, exe
+
+
+_PLATFORM_SUFFIX, _EXE_SUFFIX = _detect_platform()
+
+# ---------------------------------------------------------------------------
 # configuration
 # ---------------------------------------------------------------------------
 
 # where we cache micromamba + tesseract
 OCR_HOME = Path.home() / ".cache" / "hindi-ocr"
-MICROMAMBA_URL = "https://github.com/mamba-org/micromamba-releases/releases/latest/download/micromamba-linux-64"
-MICROMAMBA_BIN = OCR_HOME / "bin" / "micromamba"
+MICROMAMBA_URL = (
+    "https://github.com/mamba-org/micromamba-releases/releases/"
+    f"latest/download/micromamba-{_PLATFORM_SUFFIX}"
+)
+MICROMAMBA_BIN = OCR_HOME / "bin" / f"micromamba{_EXE_SUFFIX}"
 TESSERACT_ENV = "ocr"
 
 # supported image extensions
@@ -38,16 +80,23 @@ SUPPORTED_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp", ".g
 # ---------------------------------------------------------------------------
 
 def _find_tesseract() -> Path | None:
-    """Look for tesseract on PATH or in our cached environment."""
+    """Look for tesseract on PATH or in our cached micromamba environment."""
+    exe = f"tesseract{_EXE_SUFFIX}"
+
     # 1. standard PATH
-    path = shutil.which("tesseract")
+    path = shutil.which(exe)
     if path:
         return Path(path)
 
-    # 2. our cached micromamba env
-    root = OCR_HOME / "envs" / TESSERACT_ENV / "bin"
-    if (root / "tesseract").is_file():
-        return root / "tesseract"
+    # 2. our cached micromamba env (check known locations)
+    env = OCR_HOME / "envs" / TESSERACT_ENV
+    candidates = [
+        env / "bin" / exe,           # Linux, macOS
+        env / "Library" / "bin" / exe,  # Windows
+    ]
+    for p in candidates:
+        if p.is_file():
+            return p
 
     return None
 
@@ -67,7 +116,8 @@ def _bootstrap_tesseract() -> Path:
     if not MICROMAMBA_BIN.is_file():
         MICROMAMBA_BIN.parent.mkdir(parents=True, exist_ok=True)
         _download(MICROMAMBA_URL, MICROMAMBA_BIN, "micromamba")
-        MICROMAMBA_BIN.chmod(0o755)
+        if not _IS_WINDOWS:
+            MICROMAMBA_BIN.chmod(0o755)
 
     # install tesseract into a named environment
     print("  installing tesseract + Hindi language data ...")
